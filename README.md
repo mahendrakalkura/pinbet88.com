@@ -14,5 +14,5 @@ How to run?
 ```
 $ cd pinbet88.com
 $ workon pinbet88.com
-$ USERNAME=... PASSWORD=... python manage.py --matches
+$ python manage.py --matches
 ```
