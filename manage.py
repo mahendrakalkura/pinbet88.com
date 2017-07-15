@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from json import loads
 from os.path import devnull
 from pprint import pprint
 from sys import argv
@@ -79,7 +80,7 @@ def get_matches(browser):
         if response:
             json = response.json()
     except Exception:
-        pass
+        print_exc()
     if not json:
         return matches
     tournaments = []
@@ -90,7 +91,9 @@ def get_matches(browser):
     for tournament in tournaments:
         items = tournament[2]
         for item in items:
-            id = item[0]
+            id = item[20]
+            if not id:
+                continue
             home = item[1]
             away = item[2]
             date_ = item[4]
@@ -117,16 +120,15 @@ def get_matches_contents_and_cookies(browser):
         wait.until(get_matches_condition)
         contents = browser.execute_script('return document.getElementsByTagName("html")[0].innerHTML')
     except Exception:
-        pass
-    print(browser.page_source)
-    exit()
+        print_exc()
     cookies = browser.get_cookies()
     cookies = {cookie['name']: cookie['value'] for cookie in cookies}
     return contents, cookies
 
 
 def get_matches_condition(browser):
-    status = expected_conditions.presence_of_element_located((By.ID, 'sports'))
+    condition = expected_conditions.presence_of_element_located((By.ID, 'sports'))
+    status = condition(browser)
     if not status:
         return False
     return True
@@ -143,8 +145,6 @@ def execute_match(id):
 def get_match(browser, id):
     match = []
     contents, cookies = get_match_contents_and_cookies(browser)
-    pprint(cookies)
-    return match
     if not contents:
         return match
     json = None
@@ -160,6 +160,7 @@ def get_match(browser, id):
         response = request(method, url, cookies=cookies, headers=headers, timeout=TIMEOUT)
         response.raise_for_status()
         json = response.json()
+        json['data'] = loads(json['data'])
     except Exception:
         print_exc()
     if not json:
@@ -182,29 +183,42 @@ def get_match_contents_and_cookies(browser):
         button.click()
         wait = WebDriverWait(browser, TIMEOUT)
         wait.until(get_match_condition_2)
+        contents = browser.execute_script('return document.getElementsByTagName("html")[0].innerHTML')
     except Exception:
         print_exc()
-    print(browser.page_source)
-    exit()
     cookies = browser.get_cookies()
     cookies = {cookie['name']: cookie['value'] for cookie in cookies}
     return contents, cookies
 
 
 def get_match_condition_1(browser):
-    status = expected_conditions.presence_of_element_located((By.NAME, 'loginId'))
+    body = browser.find_element_by_tag_name('body')
+    className = body.get_attribute('class')
+    className = className.strip()
+    if className != 'en_US noauth':
+        return False
+    condition = expected_conditions.visibility_of_element_located((By.NAME, 'loginId'))
+    status = condition(browser)
     if not status:
         return False
-    status = expected_conditions.presence_of_element_located((By.NAME, 'password'))
+    condition = expected_conditions.visibility_of_element_located((By.NAME, 'password'))
+    status = condition(browser)
     if not status:
         return False
     return True
 
 
 def get_match_condition_2(browser):
-    if 'Welcome Back' in browser.page_source:
-        return True
-    return False
+    body = browser.find_element_by_tag_name('body')
+    className = body.get_attribute('class')
+    className = className.strip()
+    if className != 'en_US PLAYER auth':
+        return False
+    login_id = browser.find_element_by_id('login-id')
+    text = login_id.text
+    if text != USERNAME:
+        return False
+    return True
 
 
 def get_browser(firefox_profile):
