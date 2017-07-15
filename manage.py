@@ -1,10 +1,9 @@
+from __future__ import print_function
 from datetime import date, datetime
 from json import loads
 from os.path import devnull
-from pprint import pprint
 from sys import argv
 from time import time
-from traceback import print_exc
 
 from requests import request
 from selenium import webdriver
@@ -36,16 +35,27 @@ def main(options):
 def execute_matches():
     firefox_profile = get_firefox_profile()
     browser = get_browser(firefox_profile)
-    matches = get_matches(browser)
-    browser.quit()
-    pprint(matches)
-
-
-def get_matches(browser):
-    matches = []
     contents, cookies = get_matches_contents_and_cookies(browser)
+    browser.quit()
     if not contents:
-        return matches
+        return
+    while True:
+        print('', end='')
+        success = 0
+        failure = 0
+        while True:
+            matches = get_matches(cookies)
+            matches = len(matches)
+            if matches:
+                success = success + 1
+            else:
+                failure = failure + 1
+            message = '\r{success:03d}/{failure:03d}'.format(success=success, failure=failure)
+            print(message, end='')
+
+
+def get_matches(cookies):
+    matches = []
     json = None
     try:
         d = date.today().isoformat()
@@ -80,7 +90,7 @@ def get_matches(browser):
         if response:
             json = response.json()
     except Exception:
-        print_exc()
+        pass
     if not json:
         return matches
     tournaments = []
@@ -120,7 +130,7 @@ def get_matches_contents_and_cookies(browser):
         wait.until(get_matches_condition)
         contents = browser.execute_script('return document.getElementsByTagName("html")[0].innerHTML')
     except Exception:
-        print_exc()
+        pass
     cookies = browser.get_cookies()
     cookies = {cookie['name']: cookie['value'] for cookie in cookies}
     return contents, cookies
@@ -137,16 +147,28 @@ def get_matches_condition(browser):
 def execute_match(id):
     firefox_profile = get_firefox_profile()
     browser = get_browser(firefox_profile)
-    match = get_match(browser, id)
-    browser.quit()
-    pprint(match)
-
-
-def get_match(browser, id):
-    match = []
     contents, cookies = get_match_contents_and_cookies(browser)
+    browser.quit()
     if not contents:
-        return match
+        return
+    while True:
+        print('', end='')
+        success = 0
+        failure = 0
+        while True:
+            match = get_match(id, cookies)
+            keys = match.keys()
+            keys = len(keys)
+            if keys == 3:
+                success = success + 1
+            else:
+                failure = failure + 1
+            message = '\r{success:03d}/{failure:03d}'.format(success=success, failure=failure)
+            print(message, end='')
+
+
+def get_match(id, cookies):
+    match = []
     json = None
     try:
         method = 'GET'
@@ -162,7 +184,7 @@ def get_match(browser, id):
         json = response.json()
         json['data'] = loads(json['data'])
     except Exception:
-        print_exc()
+        pass
     if not json:
         return match
     match = json
@@ -185,7 +207,7 @@ def get_match_contents_and_cookies(browser):
         wait.until(get_match_condition_2)
         contents = browser.execute_script('return document.getElementsByTagName("html")[0].innerHTML')
     except Exception:
-        print_exc()
+        pass
     cookies = browser.get_cookies()
     cookies = {cookie['name']: cookie['value'] for cookie in cookies}
     return contents, cookies
