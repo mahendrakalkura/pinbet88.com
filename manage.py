@@ -1,8 +1,9 @@
 from __future__ import print_function
+from csv import writer
 from datetime import date, datetime
 from json import loads
 from os.path import devnull
-from sys import argv
+from sys import argv, stdout
 from time import time
 
 from requests import request
@@ -14,10 +15,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 URLS_HOME = 'https://www.pinbet88.com/en/sports/soccer'
 URLS_MATCHES = 'https://www.pinbet88.com/sports-service/sv/odds/events'
-URLS_MATCH = 'http://live.pinbet88.com/live-center-service/s/match/restore/{id:s}'
+URLS_MATCH = 'http://live.pinbet88.com/live-center-service/s/match/restore/{id:d}'
 USERNAME = 'CA701YT003'
 PASSWORD = 'abcd1234'
-TIMEOUT = 30
+TIMEOUT = 60
 USER_AGENT = 'Mozilla/6.0 (X11; Linux x86_64) AppleWebKit/6.0 (KHTML, like Gecko) Chrome/6.0 Safari/6.0'
 
 RemoteConnection._timeout = TIMEOUT
@@ -30,13 +31,13 @@ def main(options):
     if options[1] == '--match':
         execute_match(options[2])
         return
+    if options[1] == '--report':
+        execute_report()
+        return
 
 
 def execute_matches():
-    firefox_profile = get_firefox_profile()
-    browser = get_browser(firefox_profile)
-    contents, cookies = get_matches_contents_and_cookies(browser)
-    browser.quit()
+    contents, cookies = get_contents_and_cookies()
     if not contents:
         return
     while True:
@@ -122,33 +123,8 @@ def get_matches(cookies):
     return matches
 
 
-def get_matches_contents_and_cookies(browser):
-    contents = None
-    try:
-        browser.get(URLS_HOME)
-        wait = WebDriverWait(browser, TIMEOUT)
-        wait.until(get_matches_condition)
-        contents = browser.execute_script('return document.getElementsByTagName("html")[0].innerHTML')
-    except Exception:
-        pass
-    cookies = browser.get_cookies()
-    cookies = {cookie['name']: cookie['value'] for cookie in cookies}
-    return contents, cookies
-
-
-def get_matches_condition(browser):
-    condition = expected_conditions.presence_of_element_located((By.ID, 'sports'))
-    status = condition(browser)
-    if not status:
-        return False
-    return True
-
-
 def execute_match(id):
-    firefox_profile = get_firefox_profile()
-    browser = get_browser(firefox_profile)
-    contents, cookies = get_match_contents_and_cookies(browser)
-    browser.quit()
+    contents, cookies = get_contents_and_cookies()
     if not contents:
         return
     while True:
@@ -168,8 +144,7 @@ def execute_match(id):
 
 
 def get_match(id, cookies):
-    match = []
-    json = None
+    match = {}
     try:
         method = 'GET'
         url = URLS_MATCH
@@ -182,21 +157,23 @@ def get_match(id, cookies):
         response = request(method, url, cookies=cookies, headers=headers, timeout=TIMEOUT)
         response.raise_for_status()
         json = response.json()
-        json['data'] = loads(json['data'])
+        data = json['data']
+        data = loads(data)
+        match = data
     except Exception:
         pass
-    if not json:
-        return match
-    match = json
     return match
 
 
-def get_match_contents_and_cookies(browser):
+def get_contents_and_cookies():
     contents = None
+    cookies = {}
     try:
+        firefox_profile = get_firefox_profile()
+        browser = get_browser(firefox_profile)
         browser.get(URLS_HOME)
         wait = WebDriverWait(browser, TIMEOUT)
-        wait.until(get_match_condition_1)
+        wait.until(condition_1)
         username = browser.find_element_by_name('loginId')
         username.send_keys(USERNAME)
         password = browser.find_element_by_name('password')
@@ -204,16 +181,17 @@ def get_match_contents_and_cookies(browser):
         button = browser.find_element_by_id('login')
         button.click()
         wait = WebDriverWait(browser, TIMEOUT)
-        wait.until(get_match_condition_2)
+        wait.until(condition_2)
         contents = browser.execute_script('return document.getElementsByTagName("html")[0].innerHTML')
+        cookies = browser.get_cookies()
+        cookies = {cookie['name']: cookie['value'] for cookie in cookies}
+        browser.quit()
     except Exception:
         pass
-    cookies = browser.get_cookies()
-    cookies = {cookie['name']: cookie['value'] for cookie in cookies}
     return contents, cookies
 
 
-def get_match_condition_1(browser):
+def condition_1(browser):
     body = browser.find_element_by_tag_name('body')
     className = body.get_attribute('class')
     className = className.strip()
@@ -230,7 +208,7 @@ def get_match_condition_1(browser):
     return True
 
 
-def get_match_condition_2(browser):
+def condition_2(browser):
     body = browser.find_element_by_tag_name('body')
     className = body.get_attribute('class')
     className = className.strip()
@@ -250,11 +228,62 @@ def get_browser(firefox_profile):
 
 def get_firefox_profile():
     firefox_profile = webdriver.FirefoxProfile()
-    firefox_profile.add_extension('adblock_plus.xpi')
     firefox_profile.set_preference('general.useragent.override', USER_AGENT)
     firefox_profile.set_preference('network.proxy.type', 0)
     firefox_profile.set_preference('xpinstall.signatures.required', False)
     return firefox_profile
+
+
+def execute_report():
+    contents, cookies = get_contents_and_cookies()
+    if not contents:
+        return
+    events = []
+    matches = get_matches(cookies)
+    for match in matches:
+        match = get_match(match['id'], cookies)
+        if 'event_list' not in match:
+            continue
+        event_list = match['event_list']
+        if 'event' not in event_list:
+            continue
+        event = event_list['event']
+        for e in event:
+            events.append(e)
+    headers = [
+        'clockRunning',
+        'currentPlaytime',
+        'date',
+        'event_code',
+        'event_code_id',
+        'event_number',
+        'game_id',
+        'minute',
+        'player_in_num',
+        'player_num',
+        'player_out_num',
+        'related_event_codes',
+        'related_events',
+        'score_away',
+        'score_home',
+        'seconds',
+        'statistics',
+        'team_id',
+        'tickerstate',
+        'tickerstate_id',
+        'zone',
+    ]
+    rows = []
+    rows.append(headers)
+    for event in events:
+        row = []
+        for header in headers:
+            r = ''
+            if header in event:
+                r = event[header]
+            row.append(r)
+        rows.append(row)
+    writer(stdout).writerows(rows)
 
 
 if __name__ == '__main__':
