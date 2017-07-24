@@ -1,7 +1,7 @@
 from __future__ import print_function
 from csv import writer
 from datetime import date, datetime
-from json import loads
+from json import dumps, loads
 from os.path import devnull
 from sys import argv, stdout
 from time import time
@@ -31,8 +31,11 @@ def main(options):
     if options[1] == '--match':
         execute_match(options[2])
         return
-    if options[1] == '--report':
-        execute_report()
+    if options[1] == '--report-1':
+        execute_report_1()
+        return
+    if options[1] == '--report-2':
+        execute_report_2()
         return
 
 
@@ -234,7 +237,7 @@ def get_firefox_profile():
     return firefox_profile
 
 
-def execute_report():
+def execute_report_1():
     contents, cookies = get_contents_and_cookies()
     if not contents:
         return
@@ -284,6 +287,21 @@ def execute_report():
             row.append(r)
         rows.append(row)
     writer(stdout).writerows(rows)
+
+
+def execute_report_2():
+    contents, cookies = get_contents_and_cookies()
+    if not contents:
+        return
+    while True:
+        matches = get_matches(cookies)
+        t = time()
+        for match in matches:
+            json = get_match(match['id'], cookies)
+            json = dumps(json)
+            file = 'files/{match_id:d}-{time:.0f}.json'.format(match_id=match['id'], time=t)
+            with open(file, 'w') as resource:
+                resource.write(json)
 
 
 if __name__ == '__main__':
